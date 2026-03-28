@@ -1,0 +1,25 @@
+﻿name: Backend - Build & Push
+
+on:
+  push:
+    branches: [master, dev, homologation]
+  pull_request:
+    branches: [master, dev, homologation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: backend-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-build.yml@v1
+    with:
+      image_name: conecta-sla-api
+      dockerfile: dockerfile
+      context: .
+      node_version: '20'
