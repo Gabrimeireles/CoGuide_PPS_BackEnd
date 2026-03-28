@@ -1,0 +1,31 @@
+﻿name: Backend - Update Swagger Docs
+
+on:
+  workflow_run:
+    workflows: ["Backend - Build & Push"]
+    types: [completed]
+    branches: [master, dev, homologation]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to update docs
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  swagger:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/swagger-pages.yml@v1
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch || github.ref_name }}
+      node_version: '20'
+      swagger_command: npm run generate:swagger
+      swagger_output_dir: swagger
+      publish_pages: true
