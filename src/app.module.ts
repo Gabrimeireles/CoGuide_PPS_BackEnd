@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
-import { GroqCloudService } from './groq-cloud/groq-cloud.service';
 import { ChatModule } from './chat/chat.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
@@ -13,11 +14,17 @@ import { ChatModule } from './chat/chat.module';
       envFilePath: '.env',
       isGlobal: true,
     }),
-    MongooseModule.forRoot(process.env.DB_URI),
+    MongooseModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('DB_URI'),
+      }),
+    }),
     AuthModule,
+    RagModule,
     ChatModule,
   ],
   controllers: [AppController],
-  providers: [AppService, GroqCloudService],
+  providers: [AppService],
 })
 export class AppModule {}
