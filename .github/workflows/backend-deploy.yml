@@ -25,23 +25,15 @@ jobs:
     uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1
     with:
       deploy_environment: homologation
-      deploy_path: ${{ secrets.DEPLOY_PATH }}
+      deploy_path: ${{ vars.DEPLOY_PATH }}
       service_name: api
       compose_env_file: .env
       runtime_env_filename: .env.backend
       api_image: ghcr.io/${{ github.repository_owner }}/conecta-sla-api
       api_tag: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.image_tag }}
-      health_url: ${{ secrets.HEALTH_URL }}
+      health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
       health_interval: 30
       skip_health_check: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_health_check == 'true' || false }}
       use_tailscale: true
-    secrets:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
-      RUNTIME_ENV_FILE: ${{ secrets.RUNTIME_ENV_FILE }}
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+    secrets: inherit

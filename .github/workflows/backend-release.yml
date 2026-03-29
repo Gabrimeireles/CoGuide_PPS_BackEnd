@@ -23,5 +23,4 @@ jobs:
       ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       release_version: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_version || '' }}
       prerelease: ${{ github.event_name != 'workflow_dispatch' && github.event.workflow_run.head_branch != 'master' }}
-    secrets:
-      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    secrets: inherit
