@@ -29,7 +29,7 @@ jobs:
       service_name: api
       compose_env_file: .env
       runtime_env_filename: .env.backend
-      api_image: ghcr.io/${{ github.repository_owner }}/CoGuide_PPS_BackEnd
+      api_image: ghcr.io/gabrimeireles/coguide-api
       api_tag: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.image_tag }}
       health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
