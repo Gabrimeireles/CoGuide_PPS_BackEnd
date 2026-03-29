@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.gitignore
+*.log
+python
+Chroma
+storage/chroma
+storage/processed
+storage/output.md
+output.md
