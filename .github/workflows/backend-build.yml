@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-build.yml@v1
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-build.yml@v1.1
     with:
       image_name: conecta-sla-api
       dockerfile: dockerfile

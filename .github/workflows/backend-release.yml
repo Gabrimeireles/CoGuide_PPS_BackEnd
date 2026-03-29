@@ -18,7 +18,7 @@ permissions:
 jobs:
   release:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/github-release.yml@v1
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/github-release.yml@v1.1
     with:
       ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       release_version: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_version || '' }}
