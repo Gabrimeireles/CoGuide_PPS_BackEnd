@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   deploy:
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.2
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.3
     with:
       deploy_environment: homologation
       deploy_path: ${{ vars.DEPLOY_PATH }}
@@ -37,4 +37,5 @@ jobs:
       skip_health_check: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_health_check == 'true' || false }}
       use_tailscale: true
     secrets: inherit
+
 
