@@ -1,8 +1,10 @@
 name: Backend - Deploy to Homologation
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Backend - Create Release"]
+    types: [completed]
+    branches: [homologation]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -22,6 +24,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.7
     with:
       deploy_environment: homologation
@@ -30,7 +33,7 @@ jobs:
       compose_env_file: .env
       runtime_env_filename: .env.backend
       api_image: ghcr.io/gabrimeireles/coguide-api
-      api_tag: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.image_tag }}
+      api_tag: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag }}
       health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
       health_interval: 30
