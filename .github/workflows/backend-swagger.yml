@@ -22,7 +22,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/swagger-pages.yml@v1.3
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/swagger-pages.yml@v1.5
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch || github.ref_name }}
       node_version: '20'

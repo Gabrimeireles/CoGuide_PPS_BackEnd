@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   deploy:
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.3
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.5
     with:
       deploy_environment: homologation
       deploy_path: ${{ vars.DEPLOY_PATH }}
