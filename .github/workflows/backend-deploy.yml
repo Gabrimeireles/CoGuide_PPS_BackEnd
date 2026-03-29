@@ -1,4 +1,4 @@
-﻿name: Backend - Deploy to Homologation
+name: Backend - Deploy to Homologation
 
 on:
   release:
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   deploy:
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.1
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.2
     with:
       deploy_environment: homologation
       deploy_path: ${{ vars.DEPLOY_PATH }}
@@ -37,3 +37,4 @@ jobs:
       skip_health_check: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_health_check == 'true' || false }}
       use_tailscale: true
     secrets: inherit
+
