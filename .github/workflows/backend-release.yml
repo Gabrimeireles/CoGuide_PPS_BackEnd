@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Backend - Update Swagger Docs"]
     types: [completed]
-    branches: [master, dev, homologation]
+    branches: [master]
   workflow_dispatch:
     inputs:
       release_version:

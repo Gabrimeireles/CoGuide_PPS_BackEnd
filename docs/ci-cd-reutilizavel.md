@@ -23,10 +23,12 @@ Os workflows reutilizaveis ficam em:
 - `.github/workflows/backend-deploy.yml`
 
 ## Fluxo recomendado
-1. **Build**: publica imagem com tags de branch/sha e `v<package.json.version>`.
-2. **Swagger**: gera docs e publica no GitHub Pages.
-3. **Release**: cria tag/release com base no `package.json.version` (ou input manual).
+1. **Build**: publica imagem com tags de branch/sha e `v<package.json.version>` no fluxo automatico da `master`.
+2. **Swagger**: gera docs e publica no GitHub Pages a partir da `master`.
+3. **Release**: cria tag/release com base no `package.json.version` (ou input manual) a partir da `master`.
 4. **Deploy**: deploy por `release.published` ou manual.
+
+Branches como `dev` e `homologation` continuam cobertas por `pull_request` e podem usar execucao manual quando necessario, evitando sobrescrever a tag versionada compartilhada.
 
 ## Sem sync de secrets
 
