@@ -24,8 +24,8 @@ async function generateSwagger() {
     app = await NestFactory.create(AppModule);
 
     const config = new DocumentBuilder()
-      .setTitle('SLA callcenter API')
-      .setDescription('Documentacao da Conecta SLA API')
+      .setTitle('CoGuide API')
+      .setDescription('Documentacao da CoGuide API')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
