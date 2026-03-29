@@ -11,17 +11,13 @@ type ChatMessage = {
 
 @Injectable()
 export class GroqCloudService {
-  private readonly groqClient: GroqClient;
+  private groqClient: GroqClient | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly ragService: RagService,
     private readonly telemetryService: AiTelemetryService,
-  ) {
-    this.groqClient = new GroqClient({
-      apiKey: this.configService.get<string>('GROQ_API_KEY'),
-    });
-  }
+  ) {}
 
   async getChatResponse(
     prompt: string,
@@ -170,7 +166,7 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
           return this.getGeminiChatCompletion(messages, 1024, 0.5);
         }
 
-        const completion = await this.groqClient.chat.completions.create({
+        const completion = await this.getGroqClient().chat.completions.create({
           messages,
           model,
           max_tokens: 1024,
@@ -209,7 +205,7 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
           return title || 'Untitled Chat';
         }
 
-        const completion = await this.groqClient.chat.completions.create({
+        const completion = await this.getGroqClient().chat.completions.create({
           messages,
           model,
           max_tokens: 20,
@@ -288,5 +284,19 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
         .trim() || '';
 
     return text;
+  }
+
+  private getGroqClient(): GroqClient {
+    if (this.groqClient) {
+      return this.groqClient;
+    }
+
+    const apiKey = this.configService.get<string>('GROQ_API_KEY');
+    if (!apiKey) {
+      throw new Error('GROQ_API_KEY is not configured');
+    }
+
+    this.groqClient = new GroqClient({ apiKey });
+    return this.groqClient;
   }
 }
