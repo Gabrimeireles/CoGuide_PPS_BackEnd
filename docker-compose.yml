@@ -11,7 +11,7 @@ services:
       RAG_CHROMA_URL: http://chroma:8000
       OLLAMA_BASE_URL: http://ollama:11434
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${API_HOST_PORT:-3002}:3000"
     depends_on:
       mongo:
         condition: service_healthy
@@ -55,8 +55,6 @@ services:
     container_name: coguide-ollama
     restart: unless-stopped
     profiles: ["local-embeddings"]
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
 
