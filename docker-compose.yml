@@ -1,0 +1,54 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: coguide-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DB_URI: mongodb://mongo:27017/coguide
+      RAG_CHROMA_URL: http://chroma:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./raw:/app/raw:ro
+    depends_on:
+      - mongo
+      - chroma
+
+  mongo:
+    image: mongo:7
+    container_name: coguide-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: coguide-chroma
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: coguide-ollama
+    restart: unless-stopped
+    profiles: ["local-embeddings"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  mongo_data:
+  chroma_data:
+  ollama_data:
