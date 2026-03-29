@@ -1,5 +1,6 @@
 services:
   api:
+    image: ${API_IMAGE:-coguide-api}:${API_TAG:-local}
     build:
       context: .
       dockerfile: dockerfile
