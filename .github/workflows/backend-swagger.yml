@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Backend - Build & Push"]
     types: [completed]
-    branches: [master]
+    branches: [master, dev, homologation]
   workflow_dispatch:
     inputs:
       branch:

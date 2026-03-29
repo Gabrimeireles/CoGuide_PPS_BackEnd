@@ -2,9 +2,10 @@ name: Backend - Build & Push
 
 on:
   push:
-    branches: [master]
+    branches: [master, dev, homologation]
   pull_request:
     branches: [master, dev, homologation]
+  workflow_dispatch:
 
 permissions:
   contents: read
