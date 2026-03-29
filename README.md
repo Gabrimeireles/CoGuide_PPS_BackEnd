@@ -1,85 +1,214 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# CoGuide PPS Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend em NestJS para suporte tecnico de eSocial com RAG, chat multi-turno e autenticacao JWT.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Objetivo do projeto
 
-## Description
+Este projeto foi evoluido como case de portfolio para demonstrar:
+- arquitetura backend orientada a IA aplicada em contexto real (suporte);
+- pipeline RAG completo (ingestao, indexacao, retrieval, resposta no chat);
+- hardening basico de API (auth, ownership, validacao);
+- operacao local reproduzivel com Docker.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Arquitetura
 
-## Project setup
-
-```bash
-$ npm install
+```text
+Cliente
+  -> API NestJS
+      -> Auth (JWT)
+      -> Chat (historico por usuario)
+      -> RAG (ingestao + retrieval)
+      -> LLM Gateway (Groq/Gemini + fallback)
+      -> MongoDB (users/chats)
+      -> ChromaDB (vetores)
+      -> Ollama/OpenAI (embeddings)
 ```
 
-## Compile and run the project
+## Fluxo completo do chat com agente
+
+1. Usuario envia mensagem em `POST /chat/send/:id?`.
+2. API gera `system message` dinamico via `getSystemMessage(query)`.
+3. `RagService` busca contexto em Chroma, aplica rerank e filtro de confianca.
+4. Prompt final e enviado ao LLM com historico do chat.
+5. Resposta retorna em formato orientado a suporte com citacoes.
+6. Mensagens sao persistidas no chat (system atualizado + user + assistant).
+
+Observacao: o comportamento de `rag/answer` foi incorporado no proprio `chat/send`.
+
+## Endpoints principais
+
+- `POST /auth/signup`
+- `POST /auth/login`
+- `GET /auth/user`
+- `POST /chat`
+- `GET /chat/user/me`
+- `GET /chat/:id`
+- `POST /chat/send/:id?`
+- `DELETE /chat/:id`
+- `POST /rag/reindex`
+- `POST /rag/context`
+
+## Pipeline RAG
+
+### Ingestao
+
+- Fonte de documentos: pasta `raw/` (subpastas suportadas).
+- Parser: PDF local (`PDFLoader`) com opcao `LlamaParse`.
+- Chunking configuravel (`RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`).
+- Embeddings: Ollama local ou OpenAI.
+- Indexacao em Chroma.
+
+### Retrieval
+
+- Busca por embedding em Chroma.
+- Filtro por distancia maxima (`RAG_MAX_DISTANCE`).
+- Filtro de chunk minimo (`RAG_MIN_CHUNK_CHARS`).
+- Dedupe de chunks similares.
+- Priorizacao de fonte por intencao de pergunta (MOS/manuais vs leiautes).
+- Enriquecimento opcional com chunk vizinho.
+
+## Decisoes de tuning implementadas
+
+### 1) Rerank hibrido
+
+Implementado no `RagService` com score combinado de:
+- similaridade vetorial (distancia normalizada);
+- overlap lexical pergunta x chunk;
+- boost por tipo de fonte (quando a intencao e procedural);
+- desempate por versao de documento.
+
+Objetivo: reduzir chunks irrelevantes em perguntas operacionais de suporte.
+
+### 2) Confianca minima de retrieval
+
+- Calcula `retrievalConfidence` a partir da melhor distancia.
+- Compara com `RAG_MIN_CONFIDENCE_THRESHOLD`.
+- Se abaixo do limiar, contexto e retornado vazio (fail-safe).
+
+Objetivo: evitar resposta "confiavel" sem base documental suficiente.
+
+### 3) Citacao obrigatoria na resposta
+
+No prompt de sistema, a resposta exige citacoes no formato `[n]` e secao:
+- `Fontes consultadas`.
+
+Objetivo: rastreabilidade para atendimento e auditoria de resposta.
+
+### 4) Prompt orientado a suporte
+
+Formato obrigatorio de resposta:
+- Diagnostico
+- Passo a passo
+- Validacao
+- Fontes consultadas
+
+Objetivo: resposta acionavel para rotina de atendimento, nao texto generico.
+
+## Seguranca aplicada
+
+- `AuthGuard` nos endpoints sensiveis.
+- Ownership check em chat (usuario so acessa proprio chat).
+- `ValidationPipe` global com `whitelist` e `forbidNonWhitelisted`.
+- Reindex protegido por JWT e chave administrativa opcional (`RAG_ADMIN_API_KEY`).
+
+## Observabilidade
+
+`AiTelemetryService` com tracing para:
+- retrieval RAG;
+- chat completion;
+- title generation.
+
+Integracao opcional com Langfuse via variaveis `LANGFUSE_*`.
+
+## Como rodar
+
+### Docker (recomendado)
+
+1. Copie `.env.example` para `.env` e ajuste chaves.
+2. Suba stack:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+docker compose up --build
 ```
 
-## Run tests
+3. Para embeddings locais (Ollama):
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+docker compose --profile local-embeddings up --build
 ```
 
-## Resources
+4. Reindex:
 
-Check out a few resources that may come in handy when working with NestJS:
+```http
+POST /rag/reindex
+Authorization: Bearer <jwt>
+Content-Type: application/json
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+{
+  "resetCollection": true,
+  "adminKey": "<RAG_ADMIN_API_KEY>"
+}
+```
 
-## Support
+### Local sem Docker
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+npm ci
+npm run build
+npm run start:dev
+```
 
-## Stay in touch
+## Variaveis de ambiente importantes
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Base:
+- `PORT`, `CORS_ORIGIN`, `DB_URI`, `JWT_SECRET`, `JWT_EXPIRES`
 
-## License
+LLM:
+- `LLM_PROVIDER` (`groq` ou `gemini`)
+- `LLM_FALLBACK_TO_GROQ`
+- `GROQ_API_KEY`, `GROQ_MODEL`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+RAG:
+- `RAG_CHROMA_URL`, `RAG_COLLECTION`, `RAG_RAW_DIR`
+- `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`
+- `RAG_RETRIEVAL_CANDIDATE_MULTIPLIER`
+- `RAG_MAX_DISTANCE`
+- `RAG_MIN_CONFIDENCE_THRESHOLD`
+- `RAG_MIN_CHUNK_CHARS`
+- `RAG_EMBEDDING_PROVIDER`, `RAG_OLLAMA_EMBEDDING_MODEL`, `RAG_OPENAI_EMBEDDING_MODEL`
+- `RAG_EMBED_BATCH_SIZE`
+
+## Qualidade
+
+Comandos usados:
+
+```bash
+npm run build
+npm test -- --runInBand
+```
+
+Estado atual esperado:
+- build passando;
+- testes unitarios atuais passando;
+- possivel log de warning do `AuthGuard` no ambiente de teste, sem quebrar a suite.
+
+## Limitacoes conhecidas
+
+1. Nao ha janela de historico no chat (contexto pode crescer e aumentar custo/latencia).
+2. Nao ha reranker cross-encoder externo (rerank atual e heuristico/hibrido local).
+3. Citacao obrigatoria esta no prompt; ainda nao existe validacao pos-resposta para forcar formato.
+4. Nao existe suite de avaliacao offline (golden set) para medir precisao de forma continua.
+5. `rag/context` retorna `loc.lines` e nem sempre pagina real do PDF.
+6. Dependencia da qualidade do OCR/texto extraido dos PDFs de origem.
+
+## Roadmap curto
+
+1. Janela deslizante de historico no `chat/send`.
+2. Validacao pos-geracao (garantir secao de fontes e pelo menos uma citacao `[n]`).
+3. Avaliacao RAG offline com perguntas reais de suporte e metricas de qualidade.
+4. Dashboard de qualidade/latencia com Langfuse.
+
+## Licenca
+
+Projeto privado para estudo, evolucao tecnica e portfolio.

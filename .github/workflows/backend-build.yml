@@ -17,9 +17,9 @@ concurrency:
 
 jobs:
   build:
-    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-build.yml@v1.3
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-build.yml@v1.5
     with:
-      image_name: conecta-sla-api
+      image_name: coguide-api
       dockerfile: dockerfile
       context: .
       node_version: '20'

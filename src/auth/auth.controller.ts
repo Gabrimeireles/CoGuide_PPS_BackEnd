@@ -7,22 +7,22 @@ import { User } from './schemas/user.schema';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
-    @Post('/signup')
-    signUp(@Body() signUpDto: SignUpDto): Promise<{ token: string }> {
-        return this.authService.signUp(signUpDto)
-    }
+  @Post('/signup')
+  signUp(@Body() signUpDto: SignUpDto): Promise<{ token: string }> {
+    return this.authService.signUp(signUpDto);
+  }
 
-    @Post('/login')
-    login(@Body() loginDto: LoginDto): Promise<{ token: string }> {
-        return this.authService.login(loginDto)
-    }
+  @Post('/login')
+  login(@Body() loginDto: LoginDto): Promise<{ token: string }> {
+    return this.authService.login(loginDto);
+  }
 
-    @UseGuards(AuthGuard('jwt'))
-    @Get('/user')
-    getUser(@Req() req: Request & { user: User }) {
-        const user = req.user;
-        return { name: user.name };
-    }
+  @UseGuards(AuthGuard())
+  @Get('/user')
+  getUser(@Req() req: Request & { user: User }) {
+    const user = req.user;
+    return { name: user.name };
+  }
 }
