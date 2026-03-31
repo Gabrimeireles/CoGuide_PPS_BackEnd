@@ -58,6 +58,23 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: coguide-ollama-pull
+    restart: "no"
+    profiles: ["local-embeddings"]
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      until ollama list >/dev/null 2>&1; do
+        echo "Waiting for ollama service...";
+        sleep 2;
+      done;
+      ollama pull ${RAG_OLLAMA_EMBEDDING_MODEL:-all-minilm};
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
 volumes:
   mongo_data:
   chroma_data:

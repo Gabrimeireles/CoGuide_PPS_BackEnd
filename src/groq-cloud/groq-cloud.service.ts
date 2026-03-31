@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import GroqClient from 'groq-sdk';
 import { ConfigService } from '@nestjs/config';
 import { RagService } from '../rag/rag.service';
@@ -35,6 +35,7 @@ export class GroqCloudService {
         return this.runChatCompletion('groq', prompt, chatHistory.length, messages);
       }
 
+      this.throwIfQuotaOrRateLimited(error, primaryProvider);
       throw error;
     }
   }
@@ -59,6 +60,7 @@ export class GroqCloudService {
           console.warn(`[LLM fallback] Gemini title generation failed, switching to Groq. Reason: ${message}`);
           return this.runTitleGeneration('groq', prompt, messages);
         }
+        this.throwIfQuotaOrRateLimited(error, primaryProvider);
         throw error;
       }
     } catch (error: unknown) {
@@ -298,5 +300,27 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
 
     this.groqClient = new GroqClient({ apiKey });
     return this.groqClient;
+  }
+
+  private throwIfQuotaOrRateLimited(
+    error: unknown,
+    provider: 'groq' | 'gemini',
+  ): void {
+    if (!this.isQuotaOrRateLimitError(error)) {
+      return;
+    }
+
+    const providerName = provider === 'groq' ? 'Groq' : 'Gemini';
+    throw new HttpException(
+      `Limite gratuito do ${providerName} atingido. Tente novamente mais tarde.`,
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private isQuotaOrRateLimitError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return /(^|[^0-9])429([^0-9]|$)|rate.?limit|quota|insufficient_quota|resource_exhausted|too many requests/i.test(
+      message,
+    );
   }
 }
