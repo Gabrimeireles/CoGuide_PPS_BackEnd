@@ -53,12 +53,14 @@ export class GroqCloudService {
       const primaryProvider = this.getLlmProvider();
 
       try {
-        return await this.runTitleGeneration(primaryProvider, prompt, messages);
+        const generated = await this.runTitleGeneration(primaryProvider, prompt, messages);
+        return this.normalizeGeneratedTitle(generated, prompt);
       } catch (error: unknown) {
         if (primaryProvider === 'gemini' && this.isFallbackToGroqEnabled()) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.warn(`[LLM fallback] Gemini title generation failed, switching to Groq. Reason: ${message}`);
-          return this.runTitleGeneration('groq', prompt, messages);
+          const generated = await this.runTitleGeneration('groq', prompt, messages);
+          return this.normalizeGeneratedTitle(generated, prompt);
         }
         this.throwIfQuotaOrRateLimited(error, primaryProvider);
         throw error;
@@ -219,6 +221,46 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
           : 'Untitled Chat';
       },
     );
+  }
+
+  private normalizeGeneratedTitle(rawTitle: string, prompt: string): string {
+    const cleaned = (rawTitle || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/\*\*/g, '')
+      .replace(/[`"]/g, '')
+      .trim();
+
+    const lines = cleaned
+      .split(/\r?\n+/)
+      .map((line) =>
+        line
+          .replace(/^[-*•]\s+/, '')
+          .replace(/^\d+[.)]\s+/, '')
+          .replace(/^op(ç|c)(a|ã)o\s*\d+\s*:\s*/i, '')
+          .trim(),
+      )
+      .filter(Boolean);
+
+    const selected =
+      lines.find(
+        (line) =>
+          !/^(aqui est[aã]o|here are|op(ç|c)(o|õ)es|options)/i.test(line),
+      ) || '';
+
+    const safeTitle = selected || this.fallbackTitleFromPrompt(prompt);
+    return safeTitle.slice(0, 80).trim() || 'Untitled Chat';
+  }
+
+  private fallbackTitleFromPrompt(prompt: string): string {
+    const normalized = (prompt || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) {
+      return 'Untitled Chat';
+    }
+
+    return normalized.split(' ').slice(0, 10).join(' ');
   }
 
   private async getGeminiChatCompletion(

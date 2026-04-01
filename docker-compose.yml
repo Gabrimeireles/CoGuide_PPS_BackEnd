@@ -10,12 +10,13 @@ services:
       DB_URI: mongodb://mongo:27017/coguide
       RAG_CHROMA_URL: http://chroma:8000
       OLLAMA_BASE_URL: http://ollama:11434
+      RAG_RAW_DIR: storage/raw
+    volumes:
+      - ./storage/raw:/app/storage/raw
     ports:
       - "127.0.0.1:${API_HOST_PORT:-3002}:3000"
     depends_on:
       mongo:
-        condition: service_healthy
-      chroma:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
@@ -43,12 +44,6 @@ services:
     restart: unless-stopped
     volumes:
       - chroma_data:/chroma/chroma
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/api/v1/heartbeat >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   ollama:
     image: ollama/ollama:latest
