@@ -13,6 +13,15 @@ export class User extends Document {
 
   @Prop()
   password: string;
+
+  @Prop({ default: 0 })
+  tokenVersion: number;
+
+  @Prop()
+  refreshTokenHash?: string;
+
+  @Prop()
+  refreshTokenExpiresAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
