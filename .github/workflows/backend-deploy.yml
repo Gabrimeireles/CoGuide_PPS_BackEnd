@@ -27,12 +27,15 @@ jobs:
   resolve_release_tag:
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     outputs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
     steps:
       - name: Resolve release tag for workflow commit
         id: resolve
         env:
+          GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
           TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |

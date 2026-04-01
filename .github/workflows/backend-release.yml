@@ -30,10 +30,13 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     needs: [release]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Resolve release tag for current commit
         id: resolve
         env:
+          GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
         run: |
