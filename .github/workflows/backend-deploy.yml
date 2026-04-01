@@ -1,8 +1,10 @@
 name: Backend - Deploy to Homologation
 
 on:
-  release:
-    types: [published, prereleased]
+  workflow_run:
+    workflows: ["Backend - Create Release"]
+    types: [completed]
+    branches: [homologation]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -16,33 +18,38 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: backend-deploy-homologation
   cancel-in-progress: false
 
 jobs:
-  retag_release_image:
-    if: ${{ github.event_name == 'release' && github.event.release.target_commitish == 'homologation' }}
+  resolve_release_tag:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
     steps:
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Retag homologation image to release tag
+      - name: Resolve release tag for workflow commit
+        id: resolve
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          SOURCE_IMAGE="ghcr.io/gabrimeireles/coguide-api:homologation"
-          TARGET_IMAGE="ghcr.io/gabrimeireles/coguide-api:${{ github.event.release.tag_name }}"
-          docker buildx imagetools create -t "${TARGET_IMAGE}" "${SOURCE_IMAGE}"
+          set -euo pipefail
+          TAG=$(gh release list --limit 50 --json tagName,targetCommitish,publishedAt --jq \
+            "[.[] | select(.targetCommitish == \"${TARGET_SHA}\" or .targetCommitish == \"${TARGET_BRANCH}\")] | sort_by(.publishedAt) | last | .tagName // empty")
+
+          if [ -z "${TAG}" ]; then
+            echo "No release tag found for commit ${TARGET_SHA} / branch ${TARGET_BRANCH}"
+            exit 1
+          fi
+
+          echo "release_tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
   deploy_release:
-    if: ${{ github.event_name == 'release' && github.event.release.target_commitish == 'homologation' }}
-    needs: [retag_release_image]
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    needs: [resolve_release_tag]
     uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.7
     with:
       deploy_environment: homologation
@@ -51,7 +58,7 @@ jobs:
       compose_env_file: .env
       runtime_env_filename: .env.backend
       api_image: ghcr.io/gabrimeireles/coguide-api
-      api_tag: ${{ github.event.release.tag_name }}
+      api_tag: ${{ needs.resolve_release_tag.outputs.release_tag }}
       health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
       health_interval: 30
@@ -76,4 +83,3 @@ jobs:
       skip_health_check: ${{ github.event.inputs.skip_health_check == 'true' }}
       use_tailscale: true
     secrets: inherit
-

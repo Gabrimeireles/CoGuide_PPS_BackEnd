@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -24,3 +25,45 @@ jobs:
       release_version: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_version || '' }}
       prerelease: ${{ github.event_name != 'workflow_dispatch' && github.event.workflow_run.head_branch != 'master' }}
     secrets: inherit
+
+  publish_version_image:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag for current commit
+        id: resolve
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG=$(gh release list --limit 50 --json tagName,targetCommitish,publishedAt --jq \
+            "[.[] | select(.targetCommitish == \"${TARGET_SHA}\" or .targetCommitish == \"${TARGET_BRANCH}\")] | sort_by(.publishedAt) | last | .tagName // empty")
+
+          if [ -z "${TAG}" ]; then
+            echo "No release tag found for commit ${TARGET_SHA} / branch ${TARGET_BRANCH}"
+            exit 1
+          fi
+
+          echo "release_tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "target_sha=${TARGET_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish semver image tag
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${TARGET_SHA:0:7}"
+          SOURCE_IMAGE="ghcr.io/gabrimeireles/coguide-api:sha-${SHORT_SHA}"
+          TARGET_IMAGE="ghcr.io/gabrimeireles/coguide-api:${RELEASE_TAG}"
+
+          docker buildx imagetools create -t "${TARGET_IMAGE}" "${SOURCE_IMAGE}"
