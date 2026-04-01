@@ -1,10 +1,8 @@
 name: Backend - Deploy to Homologation
 
 on:
-  workflow_run:
-    workflows: ["Backend - Create Release"]
-    types: [completed]
-    branches: [homologation]
+  release:
+    types: [published, prereleased]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -16,15 +14,35 @@ on:
         type: boolean
         default: false
 
-permissions: {}
+permissions:
+  contents: read
+  packages: write
 
 concurrency:
   group: backend-deploy-homologation
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+  retag_release_image:
+    if: ${{ github.event_name == 'release' && github.event.release.target_commitish == 'homologation' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag homologation image to release tag
+        run: |
+          SOURCE_IMAGE="ghcr.io/gabrimeireles/coguide-api:homologation"
+          TARGET_IMAGE="ghcr.io/gabrimeireles/coguide-api:${{ github.event.release.tag_name }}"
+          docker buildx imagetools create -t "${TARGET_IMAGE}" "${SOURCE_IMAGE}"
+
+  deploy_release:
+    if: ${{ github.event_name == 'release' && github.event.release.target_commitish == 'homologation' }}
+    needs: [retag_release_image]
     uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.7
     with:
       deploy_environment: homologation
@@ -33,12 +51,29 @@ jobs:
       compose_env_file: .env
       runtime_env_filename: .env.backend
       api_image: ghcr.io/gabrimeireles/coguide-api
-      api_tag: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.event.inputs.image_tag }}
+      api_tag: ${{ github.event.release.tag_name }}
       health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
       health_interval: 30
-      skip_health_check: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_health_check == 'true' || false }}
+      skip_health_check: false
       use_tailscale: true
     secrets: inherit
 
+  deploy_manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.7
+    with:
+      deploy_environment: homologation
+      deploy_path: ${{ vars.DEPLOY_PATH }}
+      service_name: api
+      compose_env_file: .env
+      runtime_env_filename: .env.backend
+      api_image: ghcr.io/gabrimeireles/coguide-api
+      api_tag: ${{ github.event.inputs.image_tag }}
+      health_url: ${{ vars.HEALTH_URL }}
+      health_retries: 10
+      health_interval: 30
+      skip_health_check: ${{ github.event.inputs.skip_health_check == 'true' }}
+      use_tailscale: true
+    secrets: inherit
 
