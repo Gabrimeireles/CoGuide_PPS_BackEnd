@@ -1,8 +1,10 @@
 name: Backend - Deploy to Homologation
 
 on:
-  release:
-    types: [published, prereleased]
+  workflow_run:
+    workflows: ["Backend - Create Release"]
+    types: [completed]
+    branches: [homologation]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -22,8 +24,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  resolve_release_tag:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve release tag from package version
+        id: resolve
+        run: |
+          set -euo pipefail
+          VERSION="$(jq -r '.version' package.json)"
+          if [ -z "${VERSION}" ] || [ "${VERSION}" = "null" ]; then
+            echo "Could not resolve package.json version"
+            exit 1
+          fi
+
+          echo "release_tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+
   deploy_release:
-    if: ${{ github.event_name == 'release' && github.event.release.target_commitish == 'homologation' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    needs: [resolve_release_tag]
     uses: Gabrimeireles/reusable-workflows/.github/workflows/docker-deploy-ssh.yml@v1.7
     with:
       deploy_environment: homologation
@@ -32,7 +58,7 @@ jobs:
       compose_env_file: .env
       runtime_env_filename: .env.backend
       api_image: ghcr.io/gabrimeireles/coguide-api
-      api_tag: ${{ github.event.release.tag_name }}
+      api_tag: ${{ needs.resolve_release_tag.outputs.release_tag }}
       health_url: ${{ vars.HEALTH_URL }}
       health_retries: 10
       health_interval: 30
