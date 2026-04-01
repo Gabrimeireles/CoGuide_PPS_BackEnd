@@ -18,8 +18,6 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-      chroma:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -46,12 +44,6 @@ services:
     restart: unless-stopped
     volumes:
       - chroma_data:/chroma/chroma
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/api/v1/heartbeat >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   ollama:
     image: ollama/ollama:latest
@@ -60,6 +52,23 @@ services:
     profiles: ["local-embeddings"]
     volumes:
       - ollama_data:/root/.ollama
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: coguide-ollama-pull
+    restart: "no"
+    profiles: ["local-embeddings"]
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      until ollama list >/dev/null 2>&1; do
+        echo "Waiting for ollama service...";
+        sleep 2;
+      done;
+      ollama pull ${RAG_OLLAMA_EMBEDDING_MODEL:-all-minilm};
+    environment:
+      OLLAMA_HOST: http://ollama:11434
 
 volumes:
   mongo_data:
