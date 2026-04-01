@@ -44,7 +44,19 @@ export class GroqCloudService {
     const messages: GroqClient.Chat.Completions.ChatCompletionMessageParam[] = [
       {
         role: 'user',
-        content: `Generate a concise and descriptive title for the following chat prompt: "${prompt}"`,
+        content: [
+          'Task: generate a title for a support chat.',
+          'Output rules:',
+          '- Return only ONE line with the final title.',
+          '- Do NOT return options, lists, labels, or explanations.',
+          '- Do NOT use quotes, markdown, or emojis.',
+          '- Max 12 words.',
+          '- Keep the same language as the user prompt.',
+          '',
+          `User prompt: "${prompt}"`,
+          '',
+          'Final title:',
+        ].join('\n'),
         name: 'title-generator',
       },
     ];
@@ -81,42 +93,46 @@ export class GroqCloudService {
         .join('\n');
       const confidenceInfo =
         typeof contextPayload.retrievalConfidence === 'number'
-          ? `Confiança da recuperação: ${contextPayload.retrievalConfidence.toFixed(2)} (limiar ${(
+          ? `Confianca da recuperacao: ${contextPayload.retrievalConfidence.toFixed(2)} (limiar ${(
               contextPayload.confidenceThreshold ?? 0
             ).toFixed(2)}).`
-          : 'Confiança da recuperação: não disponível.';
+          : 'Confianca da recuperacao: nao disponivel.';
 
-      const systemPrompt = `
-Você é um assistente técnico de suporte sobre eSocial para atendimento de clientes de software de RH.
-Responda sempre em português brasileiro, de forma objetiva e operacional.
-
-Regras obrigatórias:
-1) Responda apenas com base no contexto fornecido.
-2) Se não houver base suficiente, diga: "Não encontrei base documental suficiente para responder com segurança." e peça o evento/período exato.
-3) Toda orientação deve conter citação no formato [n], usando os identificadores já presentes no contexto.
-4) Não invente norma, prazo, código de evento ou procedimento.
-5) Não use markdown.
-
-Formato obrigatório da resposta (texto puro):
-Diagnóstico:
-...
-
-Passo a passo:
-1. ...
-2. ...
-
-Validação:
-- ...
-
-Fontes consultadas:
-- [n] resumo curto da fonte usada
-
-Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução e checagens finais.
-      `;
+      const systemPrompt = [
+        'Voce e um assistente tecnico de suporte sobre eSocial para clientes de software de RH.',
+        'Escreva SEMPRE em portugues brasileiro e em texto puro (sem markdown).',
+        '',
+        'Hierarquia de decisao:',
+        '1) Priorize exatamente o contexto recuperado.',
+        '2) Nao invente norma, prazo, codigo de evento ou procedimento.',
+        '3) Se houver insuficiencia de base, responda exatamente:',
+        '"Nao encontrei base documental suficiente para responder com seguranca."',
+        'Em seguida, solicite o evento e o periodo exatos.',
+        '',
+        'Regras obrigatorias:',
+        '- Toda orientacao deve incluir citacoes no formato [n].',
+        '- Use apenas os identificadores [n] presentes no contexto.',
+        '- Se houver conflito entre trechos, sinalize o conflito e priorize o trecho mais especifico e mais recente.',
+        '- Nao omita pre-condicoes, excecoes e validacoes finais.',
+        '',
+        'Formato obrigatorio da resposta:',
+        'Diagnostico:',
+        '<resumo objetivo do problema e causa provavel>',
+        '',
+        'Passo a passo:',
+        '1. <acao concreta>',
+        '2. <acao concreta>',
+        '',
+        'Validacao:',
+        '- <checagem objetiva de sucesso>',
+        '',
+        'Fontes consultadas:',
+        '- [n] <resumo curto da fonte usada>',
+      ].join('\n');
 
       const fallbackGuard = contextPayload.confident
         ? ''
-        : '\nATENÇÃO: recuperação com baixa confiança. Só responda com cautela e, se necessário, use a mensagem de insuficiência documental.\n';
+        : '\nATENCAO: recuperacao com baixa confianca. Responda com cautela e use a mensagem de insuficiencia documental quando necessario.\n';
 
       const supportPlaybookSection = supportPlaybookText
         ? `\nPlaybook sugerido para atendimento:\n${supportPlaybookText}\n`
@@ -234,9 +250,9 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
       .split(/\r?\n+/)
       .map((line) =>
         line
-          .replace(/^[-*•]\s+/, '')
+          .replace(/^[-*]\s+/, '')
           .replace(/^\d+[.)]\s+/, '')
-          .replace(/^op(ç|c)(a|ã)o\s*\d+\s*:\s*/i, '')
+          .replace(/^op(?:cao|c[aã]o)\s*\d+\s*:\s*/i, '')
           .trim(),
       )
       .filter(Boolean);
@@ -244,7 +260,7 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
     const selected =
       lines.find(
         (line) =>
-          !/^(aqui est[aã]o|here are|op(ç|c)(o|õ)es|options)/i.test(line),
+          !/^(aqui estao|here are|opcoes|options)/i.test(line),
       ) || '';
 
     const safeTitle = selected || this.fallbackTitleFromPrompt(prompt);
@@ -366,3 +382,4 @@ Priorize linguagem de atendimento/suporte: ação concreta, ordem de execução 
     );
   }
 }
+
