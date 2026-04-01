@@ -30,26 +30,25 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     needs: [release]
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Resolve release tag for current commit
+      - name: Check out target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve release tag from package version
         id: resolve
         env:
-          GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG=$(gh release list --limit 50 --json tagName,targetCommitish,publishedAt --jq \
-            "[.[] | select(.targetCommitish == \"${TARGET_SHA}\" or .targetCommitish == \"${TARGET_BRANCH}\")] | sort_by(.publishedAt) | last | .tagName // empty")
-
-          if [ -z "${TAG}" ]; then
-            echo "No release tag found for commit ${TARGET_SHA} / branch ${TARGET_BRANCH}"
+          VERSION="$(jq -r '.version' package.json)"
+          if [ -z "${VERSION}" ] || [ "${VERSION}" = "null" ]; then
+            echo "Could not resolve package.json version"
             exit 1
           fi
 
-          echo "release_tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "target_sha=${TARGET_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Log in to GHCR
