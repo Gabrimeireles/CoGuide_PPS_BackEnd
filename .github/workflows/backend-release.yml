@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
@@ -24,3 +25,46 @@ jobs:
       release_version: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_version || '' }}
       prerelease: ${{ github.event_name != 'workflow_dispatch' && github.event.workflow_run.head_branch != 'master' }}
     secrets: inherit
+
+  publish_version_image:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve release tag and source tag
+        id: resolve
+        env:
+          SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$(jq -r '.version' package.json)"
+          if [ -z "${VERSION}" ] || [ "${VERSION}" = "null" ]; then
+            echo "Could not resolve package.json version"
+            exit 1
+          fi
+
+          echo "release_tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "source_tag=${SOURCE_BRANCH}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish semver image tag
+        env:
+          SOURCE_TAG: ${{ steps.resolve.outputs.source_tag }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          SOURCE_IMAGE="ghcr.io/gabrimeireles/coguide-api:${SOURCE_TAG}"
+          TARGET_IMAGE="ghcr.io/gabrimeireles/coguide-api:${RELEASE_TAG}"
+
+          docker buildx imagetools create -t "${TARGET_IMAGE}" "${SOURCE_IMAGE}"
