@@ -2,6 +2,9 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -24,10 +27,38 @@ export class RagController {
     const adminKey = this.configService.get<string>('RAG_ADMIN_API_KEY');
 
     if (adminKey && dto.adminKey !== adminKey) {
-      throw new ForbiddenException('Admin key inválida');
+      throw new ForbiddenException('Admin key invalida');
     }
 
-    return this.ragService.reindexFromStorage(dto.resetCollection ?? true);
+    const { job, alreadyRunning } = this.ragService.startReindexJob(
+      dto.resetCollection ?? true,
+    );
+
+    return {
+      ...job,
+      alreadyRunning,
+      message: alreadyRunning ? 'Reindex already running' : 'Reindex started',
+    };
+  }
+
+  @UseGuards(AuthGuard())
+  @Get('reindex/status/:jobId')
+  async getReindexStatus(@Param('jobId') jobId: string) {
+    const status = this.ragService.getReindexJobStatus(jobId);
+    if (!status) {
+      throw new NotFoundException('Reindex job not found');
+    }
+    return status;
+  }
+
+  @UseGuards(AuthGuard())
+  @Get('reindex/status')
+  async getLatestReindexStatus() {
+    const latest = this.ragService.getLatestReindexJobStatus();
+    if (!latest) {
+      throw new NotFoundException('No reindex job found');
+    }
+    return latest;
   }
 
   @UseGuards(AuthGuard())

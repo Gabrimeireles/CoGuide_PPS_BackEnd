@@ -20,10 +20,24 @@ type ReindexResult = {
   collection: string;
 };
 
+type ReindexJobState = 'running' | 'completed' | 'failed';
+
+export type ReindexJobStatus = {
+  jobId: string;
+  state: ReindexJobState;
+  resetCollection: boolean;
+  startedAt: string;
+  finishedAt?: string;
+  result?: ReindexResult;
+  error?: string;
+};
+
 @Injectable()
 export class RagService implements OnModuleInit {
   private readonly logger = new Logger(RagService.name);
   private vectorStore: Chroma | null = null;
+  private readonly reindexJobs = new Map<string, ReindexJobStatus>();
+  private activeReindexJobId: string | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -185,6 +199,44 @@ export class RagService implements OnModuleInit {
     };
   }
 
+  startReindexJob(resetCollection = true): {
+    job: ReindexJobStatus;
+    alreadyRunning: boolean;
+  } {
+    if (this.activeReindexJobId) {
+      const runningJob = this.reindexJobs.get(this.activeReindexJobId);
+      if (runningJob && runningJob.state === 'running') {
+        return { job: runningJob, alreadyRunning: true };
+      }
+      this.activeReindexJobId = null;
+    }
+
+    const jobId = randomUUID();
+    const job: ReindexJobStatus = {
+      jobId,
+      state: 'running',
+      resetCollection,
+      startedAt: new Date().toISOString(),
+    };
+
+    this.reindexJobs.set(jobId, job);
+    this.activeReindexJobId = jobId;
+
+    void this.runReindexJob(jobId, resetCollection);
+    return { job, alreadyRunning: false };
+  }
+
+  getReindexJobStatus(jobId: string): ReindexJobStatus | null {
+    return this.reindexJobs.get(jobId) ?? null;
+  }
+
+  getLatestReindexJobStatus(): ReindexJobStatus | null {
+    const latest = Array.from(this.reindexJobs.values()).sort((a, b) =>
+      b.startedAt.localeCompare(a.startedAt),
+    )[0];
+    return latest ?? null;
+  }
+
   private async initializeVectorStore(): Promise<void> {
     if (this.vectorStore) {
       return;
@@ -194,6 +246,60 @@ export class RagService implements OnModuleInit {
       collectionName: this.getCollectionName(),
       url: this.getChromaUrl(),
     });
+  }
+
+  private async runReindexJob(
+    jobId: string,
+    resetCollection: boolean,
+  ): Promise<void> {
+    const baseJob =
+      this.reindexJobs.get(jobId) ??
+      ({
+        jobId,
+        state: 'running',
+        resetCollection,
+        startedAt: new Date().toISOString(),
+      } as ReindexJobStatus);
+
+    try {
+      const result = await this.reindexFromStorage(resetCollection);
+      this.reindexJobs.set(jobId, {
+        ...baseJob,
+        state: 'completed',
+        finishedAt: new Date().toISOString(),
+        result,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Reindex job ${jobId} failed: ${message}`);
+      this.reindexJobs.set(jobId, {
+        ...baseJob,
+        state: 'failed',
+        finishedAt: new Date().toISOString(),
+        error: message,
+      });
+    } finally {
+      if (this.activeReindexJobId === jobId) {
+        this.activeReindexJobId = null;
+      }
+      this.trimReindexHistory();
+    }
+  }
+
+  private trimReindexHistory(): void {
+    const maxHistory = 20;
+    const finishedJobs = Array.from(this.reindexJobs.values())
+      .filter((job) => job.state !== 'running')
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+
+    const excess = finishedJobs.length - maxHistory;
+    if (excess <= 0) {
+      return;
+    }
+
+    for (let i = 0; i < excess; i += 1) {
+      this.reindexJobs.delete(finishedJobs[i].jobId);
+    }
   }
 
   private getEmbeddings() {
