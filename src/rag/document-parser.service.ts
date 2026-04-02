@@ -60,7 +60,16 @@ export class DocumentParserService {
       splitByPage: true,
     });
 
-    const parsedDocs = await reader.loadData(filePath);
+    let parsedDocs: any[] = [];
+    try {
+      parsedDocs = await reader.loadData(filePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `LlamaParse failed for "${filePath}" (${message}). Falling back to PDFLoader.`,
+      );
+      return this.parseWithPdfLoader(filePath);
+    }
 
     return parsedDocs
       .map((doc: any) => {

@@ -17,6 +17,8 @@ import { RagContextResponse } from './types/rag-context.types';
 type ReindexResult = {
   filesIndexed: number;
   chunksIndexed: number;
+  failedBatches: number;
+  failedChunks: number;
   collection: string;
 };
 
@@ -171,6 +173,8 @@ export class RagService implements OnModuleInit {
 
     const files = await this.collectFiles(rawDir);
     let chunksIndexed = 0;
+    let failedBatches = 0;
+    let failedChunks = 0;
     const embedBatchSize = this.getEmbeddingBatchSize();
 
     for (const filePath of files) {
@@ -182,19 +186,31 @@ export class RagService implements OnModuleInit {
         for (let i = 0; i < chunks.length; i += embedBatchSize) {
           const docsBatch = chunks.slice(i, i + embedBatchSize);
           const idsBatch = ids.slice(i, i + embedBatchSize);
-          await this.vectorStore!.addDocuments(docsBatch, { ids: idsBatch });
+          const saved = await this.addDocumentsWithRetry(
+            docsBatch,
+            idsBatch,
+            filePath,
+            i / embedBatchSize,
+          );
+          if (saved) {
+            chunksIndexed += docsBatch.length;
+          } else {
+            failedBatches += 1;
+            failedChunks += docsBatch.length;
+          }
         }
-        chunksIndexed += chunks.length;
       }
     }
 
     this.logger.log(
-      `RAG index ready. files=${files.length} chunks=${chunksIndexed} collection=${collection}`,
+      `RAG index ready. files=${files.length} chunks=${chunksIndexed} failedBatches=${failedBatches} failedChunks=${failedChunks} collection=${collection}`,
     );
 
     return {
       filesIndexed: files.length,
       chunksIndexed,
+      failedBatches,
+      failedChunks,
       collection,
     };
   }
@@ -402,12 +418,105 @@ export class RagService implements OnModuleInit {
 
   private getEmbeddingBatchSize(): number {
     const value = Number(
-      this.configService.get<string>('RAG_EMBED_BATCH_SIZE') || 64,
+      this.configService.get<string>('RAG_EMBED_BATCH_SIZE') || 1,
     );
     if (!Number.isFinite(value) || value <= 0) {
-      return 64;
+      return 1;
     }
     return Math.floor(value);
+  }
+
+  private getEmbedRequestTimeoutMs(): number {
+    const value = Number(
+      this.configService.get<string>('RAG_EMBED_REQUEST_TIMEOUT_MS') || 240000,
+    );
+    if (!Number.isFinite(value) || value <= 0) {
+      return 240000;
+    }
+    return Math.floor(value);
+  }
+
+  private getEmbedRetries(): number {
+    const value = Number(this.configService.get<string>('RAG_EMBED_RETRIES') || 2);
+    if (!Number.isFinite(value) || value < 0) {
+      return 2;
+    }
+    return Math.floor(value);
+  }
+
+  private getEmbedRetryDelayMs(): number {
+    const value = Number(
+      this.configService.get<string>('RAG_EMBED_RETRY_DELAY_MS') || 1500,
+    );
+    if (!Number.isFinite(value) || value < 0) {
+      return 1500;
+    }
+    return Math.floor(value);
+  }
+
+  private async addDocumentsWithRetry(
+    docsBatch: Document[],
+    idsBatch: string[],
+    filePath: string,
+    batchIndex: number,
+  ): Promise<boolean> {
+    const retries = this.getEmbedRetries();
+    const timeoutMs = this.getEmbedRequestTimeoutMs();
+    const retryDelayMs = this.getEmbedRetryDelayMs();
+
+    for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
+      try {
+        await this.withTimeout(
+          this.vectorStore!.addDocuments(docsBatch, { ids: idsBatch }),
+          timeoutMs,
+          `Embedding timeout after ${timeoutMs}ms`,
+        );
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Embedding batch failed file="${filePath}" batch=${batchIndex} attempt=${attempt}/${
+            retries + 1
+          }: ${message}`,
+        );
+        if (attempt <= retries) {
+          await this.sleep(retryDelayMs * attempt);
+        }
+      }
+    }
+
+    this.logger.error(
+      `Skipping embedding batch after retries file="${filePath}" batch=${batchIndex} size=${docsBatch.length}`,
+    );
+    return false;
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    timeoutMessage: string,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout | null = null;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (ms <= 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   private getCandidateCount(k: number): number {
